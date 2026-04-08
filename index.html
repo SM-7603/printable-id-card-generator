@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Printable Employee ID Cards</title>
+  <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.6/dist/JsBarcode.all.min.js"></script>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div class="app-shell">
+    <aside class="panel controls-panel">
+      <div class="panel-header">
+        <h1>Printable ID Cards</h1>
+        <p class="subtle">
+          Browser-only card generator for fixed-size printable IDs. Upload a CSV or paste names,
+          generate user IDs as <strong>first initial + last name</strong>, then print and cut.
+        </p>
+      </div>
+
+      <section class="controls-section">
+        <h2>Branding</h2>
+        <div class="field">
+          <label for="companyName">Company / Header</label>
+          <input id="companyName" type="text" value="GEODIS | Shift 2" />
+        </div>
+        <div class="field">
+          <label for="companySubtitle">Subtitle</label>
+          <input id="companySubtitle" type="text" value="Oshawa 6011 · Employee Access ID" />
+        </div>
+        <div class="field">
+          <label for="logoUpload">Logo</label>
+          <input id="logoUpload" type="file" accept="image/*" />
+        </div>
+      </section>
+
+      <section class="controls-section">
+        <h2>Layout</h2>
+        <div class="row two-col">
+          <div class="field">
+            <label for="pageSize">Page Size</label>
+            <select id="pageSize">
+              <option value="letter" selected>Letter</option>
+              <option value="a4">A4</option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="pagePadding">Page Padding (mm)</label>
+            <input id="pagePadding" type="number" min="4" max="20" step="0.5" value="10" />
+          </div>
+        </div>
+        <div class="row two-col">
+          <div class="field">
+            <label for="gridGap">Gap Between Cards (mm)</label>
+            <input id="gridGap" type="number" min="0" max="10" step="0.5" value="4" />
+          </div>
+          <div class="field">
+            <label for="accentColor">Accent</label>
+            <input id="accentColor" type="text" value="#2d11ea" />
+          </div>
+        </div>
+      </section>
+
+      <section class="controls-section">
+        <h2>People Data</h2>
+        <div class="field">
+          <label for="csvFile">Upload CSV</label>
+          <input id="csvFile" type="file" accept=".csv,text/csv" />
+        </div>
+        <div class="field">
+          <label for="csvInput">Or paste CSV / names</label>
+          <textarea id="csvInput">full_name
+Anne Jotheeswaran
+Cabeeshankaran Prabakaran
+Evelyn Bukosela
+Humza Kayani
+Jebin Bosco
+Jigeshkumar Barot
+Priyanshu Bhatt
+Rajbir Singh
+Rupam Sharma
+Shorya Singh</textarea>
+        </div>
+
+        <div class="sample-block">
+          <div class="sample-title">Accepted formats</div>
+          <pre class="sample">1) full_name
+Anne Jotheeswaran
+Humza Kayani
+
+2) first_name,last_name
+Anne,Jotheeswaran
+Humza,Kayani
+
+3) full_name,user_id
+Anne Jotheeswaran,AJOTHEESWARA
+Humza Kayani,HKAYANI
+
+4) user_id,full_name
+AJOTHEESWARA,Anne Jotheeswaran
+HKAYANI,Humza Kayani</pre>
+        </div>
+
+        <div class="btn-row">
+          <button id="renderBtn" type="button">Render cards</button>
+          <button id="printBtn" type="button">Print</button>
+          <button id="downloadCsvBtn" type="button" class="secondary">Sample CSV</button>
+        </div>
+
+        <div id="status" class="status">Ready.</div>
+
+        <div class="pill-row">
+          <span class="pill">Fixed 85.6 * 54 mm</span>
+          <span class="pill">CSV-driven</span>
+          <span class="pill">Browser-only</span>
+        </div>
+      </section>
+    </aside>
+
+    <main class="panel preview-panel">
+      <div class="preview-toolbar">
+        <div>
+          <h2>Preview</h2>
+          <p class="subtle">Print at 100% scale. Disable browser headers and footers.</p>
+        </div>
+      </div>
+      <div class="preview-shell">
+        <div id="preview"></div>
+      </div>
+      <footer class="app-footer">Built by Shubham Mohanty · Internal tool</footer>
+    </main>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
