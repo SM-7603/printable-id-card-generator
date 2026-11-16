@@ -64,3 +64,6 @@ Without a header the app guesses: one column = full name; `Full Name,ID`; `ID,Fu
 - `app.js` — parsing, ID generation, rendering, persistence
 - `barcode.js` — self-contained Code 128 encoder (SVG)
 - `assets/` — default logo
+
+When you change `styles.css`, `app.js` or `barcode.js`, bump the `?v=` number on their links in `index.html`.
+Otherwise browsers (Firefox especially) keep using the old copies for a while after GitHub Pages updates.
