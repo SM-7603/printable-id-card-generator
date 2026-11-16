@@ -11,7 +11,7 @@ const PAPER = {
   a4: { w: 210, h: 297, css: 'A4' }
 };
 const DEFAULT_LOGO = 'assets/geodis-logo.png';
-const STORAGE_KEY = 'idcard-studio:v1';
+const STORAGE_KEY = 'idcard-studio:v2';
 
 const SAMPLE_PEOPLE = [
   'full_name',
@@ -32,25 +32,27 @@ const HEADER_ALIASES = {
   name: ['full name', 'fullname', 'name', 'employee name', 'employee', 'associate name', 'associate'],
   first: ['first name', 'firstname', 'first', 'given name'],
   last: ['last name', 'lastname', 'last', 'surname', 'family name'],
-  id: ['user id', 'userid', 'id', 'employee id', 'badge', 'badge id', 'badge number', 'login', 'username']
+  id: ['user id', 'userid', 'id', 'employee id', 'badge', 'badge id', 'badge number', 'login', 'username'],
+  shift: ['shift', 'shift name', 'team', 'crew']
 };
 
 // Inputs whose values are saved and trigger a re-render.
 const SETTING_IDS = [
-  'csvInput', 'idMaxLen', 'companyName', 'companySubtitle', 'accentColor',
-  'showIdText', 'pageSize', 'orientation', 'pagePadding', 'gridGap', 'cutMarks'
+  'csvInput', 'idRule', 'idMaxLen', 'companyName', 'shift', 'site', 'cardLabel', 'accentColor',
+  'showIdText', 'colorHeader', 'pageSize', 'orientation', 'pagePadding', 'gridGap', 'cutMarks'
 ];
 
 const $ = (id) => document.getElementById(id);
 const refs = Object.fromEntries(
   [...SETTING_IDS, 'csvFile', 'dropzone', 'logoUpload', 'logoClear', 'accentHex', 'fitInfo',
     'summary', 'printBtn', 'exportBtn', 'sampleBtn', 'resetBtn', 'rosterBody', 'rosterCount',
-    'preview', 'previewWrap', 'pageRule', 'formatsBtn', 'formats'].map((id) => [id, $(id)])
+    'preview', 'previewWrap', 'pageRule', 'formatsBtn', 'formats', 'rosterBar', 'rosterBarText', 'checkAllBtn'].map((id) => [id, $(id)])
 );
 
 const state = {
   logo: DEFAULT_LOGO, // URL/data URL, or null for "no logo"
-  people: []
+  rows: [], // parsed input rows: { name, rawId, shift, line }
+  people: [] // rows with final IDs, source ('list' | 'guess') and notes
 };
 
 // ---------------------------------------------------------------------------
@@ -121,12 +123,19 @@ function sanitizeId(value) {
     .toUpperCase();
 }
 
-// "Anne Jotheeswaran" -> "AJOTHEESWARAN" (untruncated; caller applies max length)
-function generateId(fullName) {
-  const parts = String(fullName || '').trim().split(/\s+/).filter(Boolean);
+// Guesses an ID from a name (untruncated; caller applies max length).
+// "Jordan Lee": initialLast -> JLEE, first -> JORDAN, firstInitial -> JORDANL, firstLast -> JORDANLEE
+function generateId(fullName, rule = 'initialLast') {
+  const parts = String(fullName || '').trim().split(/\s+/).map(sanitizeId).filter(Boolean);
   if (!parts.length) return '';
-  if (parts.length === 1) return sanitizeId(parts[0]);
-  return sanitizeId(parts[0]).slice(0, 1) + sanitizeId(parts[parts.length - 1]);
+  const first = parts[0];
+  const last = parts.length > 1 ? parts[parts.length - 1] : '';
+  switch (rule) {
+    case 'first': return first;
+    case 'firstInitial': return first + last.slice(0, 1);
+    case 'firstLast': return first + last;
+    default: return last ? first.slice(0, 1) + last : first;
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -180,7 +189,7 @@ function headerRole(cell) {
   return Object.keys(HEADER_ALIASES).find((role) => HEADER_ALIASES[role].includes(key)) || null;
 }
 
-// Turns raw text into [{ name, rawId, line }].
+// Turns raw text into [{ name, rawId, shift, line }].
 function parseInput(text) {
   const clean = String(text || '').replace(/^﻿/, ''); // strip Excel BOM
   if (!clean.trim()) return [];
@@ -197,11 +206,13 @@ function parseInput(text) {
     const line = idx + (hasHeader ? 2 : 1);
     let name = '';
     let rawId = '';
+    let shift = '';
 
     if (hasHeader) {
       const pick = (role) => (role in col ? cols[col[role]] || '' : '');
       name = pick('name') || [pick('first'), pick('last')].filter(Boolean).join(' ');
       rawId = pick('id');
+      shift = pick('shift');
     } else if (cols.length === 1) {
       name = cols[0];
     } else if (/\s/.test(cols[0])) {
@@ -223,7 +234,7 @@ function parseInput(text) {
     }
 
     name = name.replace(/\s+/g, ' ').trim();
-    if (name || rawId) out.push({ name, rawId: rawId.trim(), line });
+    if (name || rawId) out.push({ name, rawId: rawId.trim(), shift: shift.trim(), line });
   });
   return out;
 }
@@ -233,7 +244,7 @@ function parseInput(text) {
 //   duplicates among them are flagged as errors.
 // - Generated IDs never collide with supplied or earlier generated IDs, and
 //   numeric suffixes stay within the max length.
-function buildPeople(rows, maxLen) {
+function buildPeople(rows, maxLen, rule) {
   const supplied = new Map();
   rows.forEach((r) => {
     const id = sanitizeId(r.rawId);
@@ -247,6 +258,7 @@ function buildPeople(rows, maxLen) {
     const warn = (msg) => { notes.push(msg); if (level === 'ok') level = 'warn'; };
     const fail = (msg) => { notes.push(msg); level = 'error'; };
     let userId = sanitizeId(r.rawId);
+    const source = userId ? 'list' : 'guess';
 
     if (!r.name) fail('Missing name');
 
@@ -254,7 +266,7 @@ function buildPeople(rows, maxLen) {
       if (userId !== r.rawId.toUpperCase()) warn(`ID cleaned from "${r.rawId}"`);
       if (supplied.get(userId) > 1) fail('Duplicate ID in your data');
     } else if (r.name) {
-      const full = generateId(r.name);
+      const full = generateId(r.name, rule);
       if (!full) {
         fail('Couldn’t generate an ID — add a user_id column');
       } else {
@@ -270,7 +282,7 @@ function buildPeople(rows, maxLen) {
       }
     }
 
-    return { name: r.name, userId, line: r.line, notes, level };
+    return { name: r.name, userId, shift: r.shift, line: r.line, source, notes, level };
   });
 }
 
@@ -318,9 +330,16 @@ function createCard(person, opts) {
     header.append(chip);
   }
   const copy = el('div', 'card-heading');
-  if (opts.title) copy.append(el('div', 'card-title', opts.title));
+  if (opts.company) copy.append(el('div', 'card-title', opts.company));
   if (opts.subtitle) copy.append(el('div', 'card-subtitle', opts.subtitle));
   header.append(copy);
+
+  const shift = person.shift || opts.shift;
+  if (shift) {
+    const badge = el('div', 'card-shift');
+    badge.append(el('span', 'card-shift-label', 'Shift'), el('span', 'card-shift-value', shift));
+    header.append(badge);
+  }
 
   const name = el('div', 'card-name', person.name);
 
@@ -335,7 +354,7 @@ function createCard(person, opts) {
   return card;
 }
 
-// Shrinks long names until they fit their box (max two lines).
+// Shrinks long names until they fit their box.
 function fitNames(root) {
   root.querySelectorAll('.card-name').forEach((node) => {
     let size = 4.6;
@@ -347,20 +366,87 @@ function fitNames(root) {
   });
 }
 
+// ---------------------------------------------------------------------------
+// Editing IDs from the list
+// ---------------------------------------------------------------------------
+function plainCell(value) {
+  const v = String(value ?? '');
+  return /[",\r\n]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v;
+}
+
+// Rewrites the text box from state.rows as full_name,user_id[,shift], so an
+// ID typed or confirmed in the list is saved in the data itself.
+function writeRowsBack() {
+  const withShift = state.rows.some((r) => r.shift);
+  const header = withShift ? 'full_name,user_id,shift' : 'full_name,user_id';
+  const lines = state.rows.map((r) => [r.name, r.rawId, ...(withShift ? [r.shift] : [])].map(plainCell).join(','));
+  refs.csvInput.value = [header, ...lines].join('\n');
+  render();
+}
+
+function setRowId(index, value) {
+  const row = state.rows[index];
+  if (!row) return;
+  row.rawId = sanitizeId(value);
+  writeRowsBack();
+}
+
+function checkAllGuesses() {
+  state.people.forEach((p, i) => {
+    if (p.source === 'guess' && p.userId) state.rows[i].rawId = p.userId;
+  });
+  writeRowsBack();
+}
+
+function statusText(p) {
+  if (p.level === 'error') return p.notes.join(' · ');
+  const parts = [p.source === 'guess' ? 'Guessed — check it' : 'Checked'];
+  return [...parts, ...p.notes].join(' · ');
+}
+
 function renderRoster(people) {
   const body = refs.rosterBody;
   body.replaceChildren();
   people.forEach((p, i) => {
-    const tr = el('tr', `level-${p.level}`);
+    const kind = p.level === 'error' ? 'error' : p.source;
+    const tr = el('tr', `row-${kind}`);
+
+    const input = el('input', 'id-input');
+    input.type = 'text';
+    input.value = p.userId;
+    input.placeholder = 'Type ID';
+    input.spellcheck = false;
+    input.setAttribute('aria-label', `User ID for ${p.name || `row ${i + 1}`}`);
+    input.addEventListener('keydown', (e) => { if (e.key === 'Enter') input.blur(); });
+    input.addEventListener('change', () => setRowId(i, input.value));
+    const idCell = el('td', 'id-cell');
+    idCell.append(input);
+
+    const statusCell = el('td');
+    const status = el('div', 'status-cell');
+    status.append(el('span', `tag tag-${kind}`, statusText(p)));
+    if (p.source === 'guess' && p.userId) {
+      const ok = el('button', 'text-btn', 'Looks right');
+      ok.type = 'button';
+      ok.addEventListener('click', () => setRowId(i, p.userId));
+      status.append(ok);
+    }
+    statusCell.append(status);
+
     tr.append(
       el('td', 'num', String(i + 1)),
       el('td', null, p.name || '—'),
-      el('td', 'mono', p.userId || '—'),
-      el('td', 'notes', p.notes.join(' · '))
+      el('td', 'muted', p.shift || refs.shift.value.trim() || '—'),
+      idCell,
+      statusCell
     );
     body.append(tr);
   });
+
+  const guesses = people.filter((p) => p.source === 'guess' && p.userId).length;
   refs.rosterCount.textContent = people.length ? `(${people.length})` : '';
+  refs.rosterBar.hidden = guesses === 0;
+  refs.rosterBarText.textContent = `${guesses} ID${guesses === 1 ? ' was' : 's were'} guessed from names. Check them against real logins, fix any that are wrong, then mark them checked.`;
 }
 
 function setSummary(parts, tone) {
@@ -390,8 +476,10 @@ function render() {
   refs.accentHex.textContent = accent;
   refs.pageRule.textContent = `@page { size: ${s.paper.css} ${s.landscape ? 'landscape' : 'portrait'}; margin: 0; }`;
   document.body.classList.toggle('no-outlines', !refs.cutMarks.checked);
+  document.body.classList.toggle('color-header', refs.colorHeader.checked);
 
-  state.people = buildPeople(parseInput(refs.csvInput.value), s.maxLen);
+  state.rows = parseInput(refs.csvInput.value);
+  state.people = buildPeople(state.rows, s.maxLen, refs.idRule.value);
   // Rows with errors (no name, no ID, duplicate ID) are listed but not printed.
   const printable = state.people.filter((p) => p.level !== 'error');
   renderRoster(state.people);
@@ -411,8 +499,9 @@ function render() {
   refs.fitInfo.dataset.tone = '';
 
   const opts = {
-    title: refs.companyName.value.trim(),
-    subtitle: refs.companySubtitle.value.trim(),
+    company: refs.companyName.value.trim(),
+    subtitle: [refs.site.value.trim(), refs.cardLabel.value.trim()].filter(Boolean).join(' · '),
+    shift: refs.shift.value.trim(),
     showIdText: refs.showIdText.checked
   };
 
@@ -428,9 +517,8 @@ function render() {
 
   const pages = Math.ceil(printable.length / layout.perPage);
   const errors = state.people.filter((p) => p.level === 'error').length;
-  const warnings = state.people.filter((p) => p.level === 'warn').length;
+  const guesses = printable.filter((p) => p.source === 'guess').length;
   refs.printBtn.disabled = printable.length === 0;
-  refs.exportBtn.disabled = state.people.length === 0;
 
   if (!state.people.length) {
     setSummary(['Add some names to get started.'], '');
@@ -438,8 +526,9 @@ function render() {
   }
   const parts = [el('strong', null, `${printable.length} card${printable.length === 1 ? '' : 's'}`),
     ` on ${pages} page${pages === 1 ? '' : 's'}`];
-  if (errors) parts.push(el('span', 'badge error', `${errors} need${errors === 1 ? 's' : ''} fixing`));
-  if (warnings) parts.push(el('span', 'badge warn', `${warnings} note${warnings === 1 ? '' : 's'}`));
+  if (errors) parts.push(el('span', 'badge error', `${errors} can’t print yet`));
+  if (guesses) parts.push(el('span', 'badge warn', `${guesses} guessed ID${guesses === 1 ? '' : 's'} to check`));
+  if (!errors && !guesses) parts.push(el('span', 'badge ok', 'All IDs checked'));
   setSummary(parts, errors ? 'error' : '');
 }
 
@@ -523,18 +612,27 @@ refs.formatsBtn.addEventListener('click', () => {
 refs.printBtn.addEventListener('click', () => {
   clearTimeout(renderTimer);
   render();
+  const guesses = state.people.filter((p) => p.level !== 'error' && p.source === 'guess').length;
+  if (guesses && !window.confirm(
+    `${guesses} ID${guesses === 1 ? ' was' : 's were'} guessed from names and ${guesses === 1 ? 'hasn’t' : 'haven’t'} been checked.\n\n` +
+    'A wrong ID means a badge that won’t scan. Print anyway?'
+  )) return;
   window.print();
 });
 
+refs.checkAllBtn.addEventListener('click', checkAllGuesses);
+
 refs.exportBtn.addEventListener('click', () => {
-  const lines = ['full_name,user_id', ...state.people
+  const lines = ['full_name,user_id,shift,id_source', ...state.people
     .filter((p) => p.name && p.userId)
-    .map((p) => `${csvCell(p.name)},${csvCell(p.userId)}`)];
+    .map((p) => [p.name, p.userId, p.shift || refs.shift.value.trim(), p.source === 'guess' ? 'guessed' : 'checked']
+      .map(csvCell).join(','))];
   download('id-cards.csv', `${lines.join('\r\n')}\r\n`, 'text/csv;charset=utf-8');
 });
 
 refs.sampleBtn.addEventListener('click', () => {
-  download('id-cards-sample.csv', 'full_name,user_id\r\nJordan Lee,JLEE\r\nPriya Patel,\r\nMarcus Chen,MCHEN07\r\n', 'text/csv;charset=utf-8');
+  // A blank user_id is fine: the app guesses one and flags it for checking.
+  download('id-cards-template.csv', 'full_name,user_id,shift\r\nJordan Lee,JLEE,2A\r\nPriya Patel,,2A\r\n', 'text/csv;charset=utf-8');
 });
 
 refs.resetBtn.addEventListener('click', () => {
