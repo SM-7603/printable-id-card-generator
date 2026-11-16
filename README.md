@@ -1,7 +1,10 @@
 # Printable ID Cards
 
 A browser-only generator for credit-card-size (85.6 × 54 mm) ID cards with Code 128 barcodes.
-No server, no install, no internet needed — open `index.html` and go.
+No server, no install, no internet needed — open `index.html` and go, or use the live page:
+**https://sm-7603.github.io/printable-id-card-generator/**
+
+![The app: settings on the left, the ID check list and card preview on the right](docs/screenshots/overview.png)
 
 ## Use it
 
@@ -14,15 +17,28 @@ No server, no install, no internet needed — open `index.html` and go.
    - Red rows (no name, no ID, the same ID twice) are left off the printout until fixed.
 
    *Print cards* asks before printing any guessed ID that hasn't been checked.
+
+   ![People & IDs list: checked IDs in green, guessed IDs amber with a dashed box, duplicate IDs in red](docs/screenshots/id-check.png)
+
 3. **Card design** — company, shift, site, card label, accent colour, logo. The header is white by
    default to save ink; tick *Coloured header* for a filled band.
+
+   | White header (default, less ink) | Coloured header |
+   | --- | --- |
+   | ![Card with a white header and shift badge](docs/screenshots/card-white.png) | ![Card with a coloured header band](docs/screenshots/card-colour.png) |
+
 4. **Print** — in the print dialog use **100% / Actual size**, margins **None**,
-   headers & footers **off**, background graphics **on**.
+   headers & footers **off**, background graphics **on**. Cards per page are worked out from
+   the paper, orientation, margin and gap (8 on Letter portrait).
+
+   <img src="docs/screenshots/print-page.png" alt="A printed Letter page with 8 cards and cut guides" width="360">
 
 *Export ID list* downloads `full_name,user_id,shift,id_source` for everyone, so you have a record of what was printed.
 Settings and the name list are saved in your browser between visits; *Reset everything* clears them.
 
 **Theme:** Light, Dark or System (follows your computer) at the bottom of the sidebar. Only the app changes; the card preview stays white because that's what prints.
+
+![Dark theme: the app goes dark, the card preview stays white](docs/screenshots/dark.png)
 
 ## Getting the right IDs
 
@@ -64,6 +80,7 @@ Without a header the app guesses: one column = full name; `Full Name,ID`; `ID,Fu
 - `app.js` — parsing, ID generation, rendering, persistence
 - `barcode.js` — self-contained Code 128 encoder (SVG)
 - `assets/` — default logo
+- `docs/screenshots/` — images used in this README
 
 When you change `styles.css`, `app.js` or `barcode.js`, bump the `?v=` number on their links in `index.html`.
 Otherwise browsers (Firefox especially) keep using the old copies for a while after GitHub Pages updates.
