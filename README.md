@@ -1,42 +1,45 @@
-# GEODIS ID Card Template
+# Printable ID Cards
 
-## Structure
+A browser-only generator for credit-card-size (85.6 × 54 mm) ID cards with Code 128 barcodes.
+No server, no install, no internet needed — open `index.html` and go.
 
-- `index.html` — main layout
-- `styles.css` — styling
-- `app.js` — CSV parsing, user ID generation, barcode rendering
-- `assets/` — logo or other images
+## Use it
 
-## Usage
+1. **People** — drop a CSV on the page, or paste names (straight from Excel/Sheets works too).
+2. **Check the list** — the *People & IDs* table shows every generated ID and flags anything odd:
+   shortened IDs, renamed duplicates, duplicate IDs in your data, names that can't produce an ID.
+   Rows marked red are left off the printout until you fix them.
+3. **Design** — header, subtitle, accent colour, logo.
+4. **Print** — click *Print cards*. In the print dialog use **100% / Actual size**, margins **None**,
+   headers & footers **off**, background graphics **on**.
 
-1. Open `index.html` in a browser.
-2. Paste names or upload a CSV.
-3. Adjust branding and layout.
-4. Click **Render cards**.
-5. Print at **100% scale** with browser headers/footers disabled.
+*Export ID list* downloads `full_name,user_id` for everyone, so you have a record of the IDs you printed.
+Settings and the name list are saved in your browser between visits; *Reset everything* clears them.
 
-## Supported CSV formats
+## Input formats
 
-```csv
-full_name
-Anne Jotheeswaran
-Humza Kayani
-```
+Columns are matched by header (case and punctuation don't matter). Recognised headers:
 
-```csv
-first_name,last_name
-Anne,Jotheeswaran
-Humza,Kayani
-```
+| Field | Headers |
+| --- | --- |
+| Full name | `full_name`, `name`, `employee name`, `employee`, `associate` |
+| First / last | `first_name`, `first`, `given name` / `last_name`, `last`, `surname`, `family name` |
+| User ID | `user_id`, `id`, `employee id`, `badge`, `badge id`, `login`, `username` |
 
-```csv
-full_name,user_id
-Anne Jotheeswaran,AJOTHEESWARA
-Humza Kayani,HKAYANI
-```
+Comma, semicolon and tab separators all work; quoted fields and Excel's UTF-8 BOM are handled.
+Without a header the app guesses: one column = full name; `Full Name,ID`; `ID,Full Name`; `First,Last`; `First,Last,ID`.
 
-```csv
-user_id,full_name
-AJOTHEESWARA,Anne Jotheeswaran
-HKAYANI,Humza Kayani
-```
+## ID rules
+
+- Generated IDs are **first initial + last name**, accents removed, letters/digits only, uppercased
+  (`María García-López` → `MGARCIALOPEZ`), cut to the *Max ID length* (default 12).
+- If a generated ID is already taken, a number is added (`JLEE`, `JLEE2`…) while staying within the max length.
+- IDs supplied in your data are used as-is (cleaned of spaces/symbols). Duplicates among them are flagged, not silently changed.
+
+## Files
+
+- `index.html` — layout
+- `styles.css` — app and card styling, print rules
+- `app.js` — parsing, ID generation, rendering, persistence
+- `barcode.js` — self-contained Code 128 encoder (SVG)
+- `assets/` — default logo

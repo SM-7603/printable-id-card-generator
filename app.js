@@ -1,46 +1,119 @@
-// -----------------------------
-// App state
-// -----------------------------
-// Stores values that change while the app is running but do not live directly
-// inside the HTML inputs. Right now this is mainly the current logo image and
-// the selected page size.
+'use strict';
+
+// ---------------------------------------------------------------------------
+// Constants
+// ---------------------------------------------------------------------------
+const CARD_W = 85.6; // mm, ISO/IEC 7810 ID-1 (credit-card size)
+const CARD_H = 54;
+const MM_TO_PX = 96 / 25.4;
+const PAPER = {
+  letter: { w: 215.9, h: 279.4, css: 'letter' },
+  a4: { w: 210, h: 297, css: 'A4' }
+};
+const DEFAULT_LOGO = 'assets/geodis-logo.png';
+const STORAGE_KEY = 'idcard-studio:v1';
+
+const SAMPLE_PEOPLE = [
+  'full_name',
+  'Jordan Lee',
+  'Priya Patel',
+  'Marcus Chen',
+  'Sofia Rossi',
+  'Omar Haddad',
+  "Emily O'Brien",
+  'María García-López',
+  'Aisha Khan',
+  'Daniel Kim',
+  'Jamie Lee'
+].join('\n');
+
+// Header names we recognise, after normalising (lowercase, punctuation → space).
+const HEADER_ALIASES = {
+  name: ['full name', 'fullname', 'name', 'employee name', 'employee', 'associate name', 'associate'],
+  first: ['first name', 'firstname', 'first', 'given name'],
+  last: ['last name', 'lastname', 'last', 'surname', 'family name'],
+  id: ['user id', 'userid', 'id', 'employee id', 'badge', 'badge id', 'badge number', 'login', 'username']
+};
+
+// Inputs whose values are saved and trigger a re-render.
+const SETTING_IDS = [
+  'csvInput', 'idMaxLen', 'companyName', 'companySubtitle', 'accentColor',
+  'showIdText', 'pageSize', 'orientation', 'pagePadding', 'gridGap', 'cutMarks'
+];
+
+const $ = (id) => document.getElementById(id);
+const refs = Object.fromEntries(
+  [...SETTING_IDS, 'csvFile', 'dropzone', 'logoUpload', 'logoClear', 'accentHex', 'fitInfo',
+    'summary', 'printBtn', 'exportBtn', 'sampleBtn', 'resetBtn', 'rosterBody', 'rosterCount',
+    'preview', 'previewWrap', 'pageRule', 'formatsBtn', 'formats'].map((id) => [id, $(id)])
+);
+
 const state = {
-  logoDataUrl: 'assets/geodis-logo.png',
-  pageSize: 'letter'
+  logo: DEFAULT_LOGO, // URL/data URL, or null for "no logo"
+  people: []
 };
 
-// -----------------------------
-// DOM references
-// -----------------------------
-// Cache the elements we use often so we do not keep querying the DOM.
-const refs = {
-  companyName: document.getElementById('companyName'),
-  companySubtitle: document.getElementById('companySubtitle'),
-  logoUpload: document.getElementById('logoUpload'),
-  pageSize: document.getElementById('pageSize'),
-  pagePadding: document.getElementById('pagePadding'),
-  gridGap: document.getElementById('gridGap'),
-  accentColor: document.getElementById('accentColor'),
-  csvFile: document.getElementById('csvFile'),
-  csvInput: document.getElementById('csvInput'),
-  renderBtn: document.getElementById('renderBtn'),
-  printBtn: document.getElementById('printBtn'),
-  downloadCsvBtn: document.getElementById('downloadCsvBtn'),
-  preview: document.getElementById('preview'),
-  status: document.getElementById('status')
-};
-
-// Small helper for showing feedback beneath the buttons.
-function setStatus(message) {
-  refs.status.textContent = message;
+// ---------------------------------------------------------------------------
+// Settings helpers
+// ---------------------------------------------------------------------------
+function readNumber(el, fallback) {
+  const n = parseFloat(el.value);
+  if (!Number.isFinite(n)) return fallback;
+  const min = el.min === '' ? -Infinity : Number(el.min);
+  const max = el.max === '' ? Infinity : Number(el.max);
+  return Math.min(max, Math.max(min, n));
 }
 
-// -----------------------------
-// User ID helpers
-// -----------------------------
-// Removes accents, strips special characters, keeps letters and digits, then
-// uppercases the final value so barcode output stays clean and consistent.
-function sanitizeForId(value) {
+function getSettings() {
+  return {
+    maxLen: Math.round(readNumber(refs.idMaxLen, 12)),
+    margin: readNumber(refs.pagePadding, 8),
+    gap: readNumber(refs.gridGap, 4),
+    paper: PAPER[refs.pageSize.value] || PAPER.letter,
+    landscape: refs.orientation.value === 'landscape'
+  };
+}
+
+function saveSettings() {
+  const data = { logo: state.logo };
+  SETTING_IDS.forEach((id) => {
+    const el = refs[id];
+    data[id] = el.type === 'checkbox' ? el.checked : el.value;
+  });
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+  } catch {
+    // Storage full (large logo) or unavailable — retry without the logo.
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify({ ...data, logo: DEFAULT_LOGO }));
+    } catch { /* ignore */ }
+  }
+}
+
+function loadSettings() {
+  let data = null;
+  try {
+    data = JSON.parse(localStorage.getItem(STORAGE_KEY) || 'null');
+  } catch { /* ignore */ }
+
+  if (!data) {
+    refs.csvInput.value = SAMPLE_PEOPLE;
+    return;
+  }
+  SETTING_IDS.forEach((id) => {
+    if (!(id in data)) return;
+    const el = refs[id];
+    if (el.type === 'checkbox') el.checked = Boolean(data[id]);
+    else el.value = data[id];
+  });
+  if ('logo' in data) state.logo = data.logo;
+}
+
+// ---------------------------------------------------------------------------
+// User IDs
+// ---------------------------------------------------------------------------
+// Strip accents and anything that isn't A–Z / 0–9, then uppercase.
+function sanitizeId(value) {
   return String(value || '')
     .normalize('NFD')
     .replace(/[̀-ͯ]/g, '')
@@ -48,329 +121,434 @@ function sanitizeForId(value) {
     .toUpperCase();
 }
 
-// Default ID rule:
-// "Anne Jotheeswaran" -> "AJOTHEESWARAN" (trimmed to 12 chars)
-// "test test2" -> "TTEST2"
-function buildUserId(fullName) {
-  const parts = String(fullName || '')
-    .trim()
-    .split(/\s+/)
-    .filter(Boolean);
-
-  if (parts.length === 0) return '';
-  if (parts.length === 1) return sanitizeForId(parts[0]).slice(0, 12);
-
-  const firstInitial = sanitizeForId(parts[0]).slice(0, 1);
-  const lastName = sanitizeForId(parts[parts.length - 1]);
-  return (firstInitial + lastName).slice(0, 12);
+// "Anne Jotheeswaran" -> "AJOTHEESWARAN" (untruncated; caller applies max length)
+function generateId(fullName) {
+  const parts = String(fullName || '').trim().split(/\s+/).filter(Boolean);
+  if (!parts.length) return '';
+  if (parts.length === 1) return sanitizeId(parts[0]);
+  return sanitizeId(parts[0]).slice(0, 1) + sanitizeId(parts[parts.length - 1]);
 }
 
-// -----------------------------
-// CSV parsing
-// -----------------------------
-// Splits one CSV line while respecting quoted commas.
-// Example: "John, Jr.",ABC123 should become two columns, not three.
-function parseCsvLine(line) {
+// ---------------------------------------------------------------------------
+// CSV / pasted text parsing
+// ---------------------------------------------------------------------------
+// Picks the delimiter from the first line: tab (pasted from Excel/Sheets),
+// semicolon (European Excel), otherwise comma.
+function detectDelimiter(text) {
+  const firstLine = text.split(/\r?\n/, 1)[0] || '';
+  if (firstLine.includes('\t')) return '\t';
+  const semis = (firstLine.match(/;/g) || []).length;
+  const commas = (firstLine.match(/,/g) || []).length;
+  return semis > commas ? ';' : ',';
+}
+
+// RFC 4180-style parser: handles quoted fields, escaped quotes ("") and
+// line breaks inside quotes.
+function parseRows(text, delim) {
+  const rows = [];
+  let row = [];
+  let cell = '';
+  let quoted = false;
+
+  for (let i = 0; i < text.length; i += 1) {
+    const ch = text[i];
+    if (quoted) {
+      if (ch === '"') {
+        if (text[i + 1] === '"') { cell += '"'; i += 1; } else quoted = false;
+      } else cell += ch;
+    } else if (ch === '"' && cell.trim() === '') {
+      quoted = true;
+      cell = '';
+    } else if (ch === delim) {
+      row.push(cell.trim());
+      cell = '';
+    } else if (ch === '\n' || ch === '\r') {
+      if (ch === '\r' && text[i + 1] === '\n') i += 1;
+      row.push(cell.trim());
+      rows.push(row);
+      row = [];
+      cell = '';
+    } else cell += ch;
+  }
+  row.push(cell.trim());
+  rows.push(row);
+  return rows.filter((r) => r.some((c) => c !== ''));
+}
+
+function headerRole(cell) {
+  const key = cell.toLowerCase().replace(/[^a-z]+/g, ' ').trim();
+  return Object.keys(HEADER_ALIASES).find((role) => HEADER_ALIASES[role].includes(key)) || null;
+}
+
+// Turns raw text into [{ name, rawId, line }].
+function parseInput(text) {
+  const clean = String(text || '').replace(/^﻿/, ''); // strip Excel BOM
+  if (!clean.trim()) return [];
+  const rows = parseRows(clean, detectDelimiter(clean));
+  if (!rows.length) return [];
+
+  const roles = rows[0].map(headerRole);
+  const hasHeader = roles.some(Boolean);
+  const col = {};
+  if (hasHeader) roles.forEach((role, i) => { if (role && !(role in col)) col[role] = i; });
+
   const out = [];
-  let current = '';
-  let inQuotes = false;
+  rows.slice(hasHeader ? 1 : 0).forEach((cols, idx) => {
+    const line = idx + (hasHeader ? 2 : 1);
+    let name = '';
+    let rawId = '';
 
-  for (let i = 0; i < line.length; i += 1) {
-    const ch = line[i];
-
-    if (ch === '"') {
-      if (inQuotes && line[i + 1] === '"') {
-        current += '"';
-        i += 1;
-      } else {
-        inQuotes = !inQuotes;
-      }
-    } else if (ch === ',' && !inQuotes) {
-      out.push(current.trim());
-      current = '';
-    } else {
-      current += ch;
-    }
-  }
-
-  out.push(current.trim());
-  return out.map((value) => value.replace(/^"|"$/g, '').trim());
-}
-
-// Converts a header row into an object for easy lookups.
-// Example: ['user_id', 'full_name'] => { user_id: 0, full_name: 1 }
-function getHeaderIndexMap(headerRow) {
-  const map = {};
-  headerRow.forEach((header, index) => {
-    map[header.toLowerCase()] = index;
-  });
-  return map;
-}
-
-// Reads the textarea / uploaded CSV and turns it into a list of people.
-// Supported formats:
-// - full_name
-// - first_name,last_name
-// - full_name,user_id
-// - user_id,full_name
-function parsePeople(text) {
-  const lines = String(text || '')
-    .split(/\r?\n/)
-    .map((line) => line.trim())
-    .filter(Boolean);
-
-
-  if (!lines.length) return [];
-
-  const firstRow = parseCsvLine(lines[0]);
-  const normalizedFirstRow = firstRow.map((value) => value.toLowerCase());
-  const hasHeader = normalizedFirstRow.some((value) => [
-    'full_name',
-    'first_name',
-    'last_name',
-    'user_id'
-  ].includes(value));
-
-  const headerIndex = hasHeader ? getHeaderIndexMap(normalizedFirstRow) : null;
-  const startIndex = hasHeader ? 1 : 0;
-  const people = [];
-
-  for (let i = startIndex; i < lines.length; i += 1) {
-    const cols = parseCsvLine(lines[i]);
-    if (!cols.length) continue;
-
-    let fullName = '';
-    let userId = '';
-
-    if (headerIndex) {
-      // Header-driven parsing is the safest path because column order can vary.
-      const firstName = cols[headerIndex.first_name] || '';
-      const lastName = cols[headerIndex.last_name] || '';
-      const fullNameField = cols[headerIndex.full_name] || '';
-      const userIdField = cols[headerIndex.user_id] || '';
-
-      fullName = fullNameField || [firstName, lastName].filter(Boolean).join(' ').trim();
-      userId = sanitizeForId(userIdField) || buildUserId(fullName);
+    if (hasHeader) {
+      const pick = (role) => (role in col ? cols[col[role]] || '' : '');
+      name = pick('name') || [pick('first'), pick('last')].filter(Boolean).join(' ');
+      rawId = pick('id');
     } else if (cols.length === 1) {
-      // Single-column input means each line is just a full name.
-      fullName = cols[0];
-      userId = buildUserId(fullName);
-    } else if (cols.length >= 2) {
-      // No header: make a reasonable guess.
-      // If the first column contains spaces, it likely already is a full name.
-      const looksLikeName = /\s/.test(cols[0]);
-      if (looksLikeName) {
-        fullName = cols[0];
-        userId = sanitizeForId(cols[1]) || buildUserId(fullName);
+      name = cols[0];
+    } else if (/\s/.test(cols[0])) {
+      // "Full Name,ID"
+      [name, rawId] = cols;
+    } else if (/\s/.test(cols[1])) {
+      // "ID,Full Name"
+      [rawId, name] = cols;
+    } else if (cols.length >= 3) {
+      // "First,Last,ID"
+      name = `${cols[0]} ${cols[1]}`;
+      rawId = cols[2];
+    } else if (/\d/.test(cols[1]) && !/\d/.test(cols[0])) {
+      // "Cher,CHER01"
+      [name, rawId] = cols;
+    } else {
+      // "First,Last"
+      name = `${cols[0]} ${cols[1]}`;
+    }
+
+    name = name.replace(/\s+/g, ' ').trim();
+    if (name || rawId) out.push({ name, rawId: rawId.trim(), line });
+  });
+  return out;
+}
+
+// Assigns final IDs and collects per-person notes.
+// - IDs supplied in the data are kept as-is (they're real system IDs), but
+//   duplicates among them are flagged as errors.
+// - Generated IDs never collide with supplied or earlier generated IDs, and
+//   numeric suffixes stay within the max length.
+function buildPeople(rows, maxLen) {
+  const supplied = new Map();
+  rows.forEach((r) => {
+    const id = sanitizeId(r.rawId);
+    if (id) supplied.set(id, (supplied.get(id) || 0) + 1);
+  });
+
+  const taken = new Set(supplied.keys());
+  return rows.map((r) => {
+    const notes = [];
+    let level = 'ok';
+    const warn = (msg) => { notes.push(msg); if (level === 'ok') level = 'warn'; };
+    const fail = (msg) => { notes.push(msg); level = 'error'; };
+    let userId = sanitizeId(r.rawId);
+
+    if (!r.name) fail('Missing name');
+
+    if (userId) {
+      if (userId !== r.rawId.toUpperCase()) warn(`ID cleaned from "${r.rawId}"`);
+      if (supplied.get(userId) > 1) fail('Duplicate ID in your data');
+    } else if (r.name) {
+      const full = generateId(r.name);
+      if (!full) {
+        fail('Couldn’t generate an ID — add a user_id column');
       } else {
-        fullName = [cols[0], cols[1]].join(' ').trim();
-        userId = cols[2] ? sanitizeForId(cols[2]) : buildUserId(fullName);
+        let base = full.slice(0, maxLen);
+        if (full.length > maxLen) warn(`Shortened to ${maxLen} characters`);
+        userId = base;
+        for (let n = 2; taken.has(userId); n += 1) {
+          const suffix = String(n);
+          userId = base.slice(0, maxLen - suffix.length) + suffix;
+        }
+        if (userId !== base) warn(`${base} already used`);
+        taken.add(userId);
       }
     }
 
-    fullName = fullName.trim();
-    if (!fullName) continue;
-
-    people.push({
-      name: fullName,
-      userId: userId || buildUserId(fullName)
-    });
-  }
-
-  return dedupeUserIds(people);
-}
-
-// If two people end up with the same generated ID, add a numeric suffix.
-// Example: RKAUR, RKAUR2, RKAUR3...
-function dedupeUserIds(people) {
-  const seen = new Map();
-
-  return people.map((person) => {
-    const base = person.userId || buildUserId(person.name) || 'USER';
-    const count = (seen.get(base) || 0) + 1;
-    seen.set(base, count);
-
-    return {
-      ...person,
-      userId: count === 1 ? base : `${base}${count}`
-    };
+    return { name: r.name, userId, line: r.line, notes, level };
   });
 }
 
-// -----------------------------
-// Layout + rendering helpers
-// -----------------------------
-// Pushes control values into CSS custom properties so the preview updates live.
-function applyLayoutSettings() {
-  const root = document.documentElement;
-  const pageSize = refs.pageSize.value;
-  state.pageSize = pageSize;
-
-  if (pageSize === 'a4') {
-    root.style.setProperty('--page-width', '210mm');
-    root.style.setProperty('--page-height', '297mm');
-  } else {
-    root.style.setProperty('--page-width', '216mm');
-    root.style.setProperty('--page-height', '279mm');
-  }
-
-  root.style.setProperty('--page-padding', `${Number(refs.pagePadding.value) || 10}mm`);
-  root.style.setProperty('--grid-gap', `${Number(refs.gridGap.value) || 4}mm`);
-  root.style.setProperty('--accent', refs.accentColor.value || '#2d11ea');
-}
-
-// Splits a long array into smaller chunks.
-// Used to create one printable page per 10 cards.
-function chunk(items, size) {
-  const result = [];
-  for (let i = 0; i < items.length; i += size) {
-    result.push(items.slice(i, i + size));
-  }
-  return result;
-}
-
-// Escapes text before inserting it into HTML.
-function escapeHtml(value) {
-  return String(value)
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#39;');
-}
-
-// Creates one card element and renders its barcode.
-function createCard(person) {
-  const card = document.createElement('section');
-  card.className = 'card';
-
-  const logoHtml = state.logoDataUrl
-    ? `<img src="${state.logoDataUrl}" alt="Company logo" />`
-    : `<div class="logo-fallback">${escapeHtml(refs.companyName.value || 'LOGO')}</div>`;
-
-  card.innerHTML = `
-    <div class="card-header">
-      <div class="logo-box">${logoHtml}</div>
-      <div class="header-copy">
-        <div class="company-name">${escapeHtml(refs.companyName.value)}</div>
-        <div class="company-subtitle">${escapeHtml(refs.companySubtitle.value)}</div>
-      </div>
-    </div>
-    <div class="employee-name">${escapeHtml(person.name)}</div>
-    <div class="barcode-wrap">
-      <svg class="barcode"></svg>
-    </div>
-    <div class="user-id">${escapeHtml(person.userId)}</div>
-  `;
-
-  const svg = card.querySelector('.barcode');
-  JsBarcode(svg, person.userId, {
-    format: 'CODE128',
-    width: 1.45,
-    height: 42,
-    displayValue: false,
-    margin: 0,
-    background: '#ffffff',
-    lineColor: '#000000'
+// ---------------------------------------------------------------------------
+// Rendering
+// ---------------------------------------------------------------------------
+function readableTextOn(hex) {
+  const m = /^#?([0-9a-f]{6})$/i.exec(hex || '');
+  if (!m) return '#fff';
+  const n = parseInt(m[1], 16);
+  const [r, g, b] = [(n >> 16) & 255, (n >> 8) & 255, n & 255].map((v) => {
+    const c = v / 255;
+    return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
   });
+  const lum = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+  return lum > 0.4 ? '#111827' : '#ffffff';
+}
 
+function layoutFor(s) {
+  const pageW = s.landscape ? s.paper.h : s.paper.w;
+  const pageH = s.landscape ? s.paper.w : s.paper.h;
+  const cols = Math.max(0, Math.floor((pageW - 2 * s.margin + s.gap) / (CARD_W + s.gap)));
+  const rows = Math.max(0, Math.floor((pageH - 2 * s.margin + s.gap) / (CARD_H + s.gap)));
+  return { pageW, pageH, cols, rows, perPage: cols * rows };
+}
+
+function el(tag, className, text) {
+  const node = document.createElement(tag);
+  if (className) node.className = className;
+  if (text != null) node.textContent = text;
+  return node;
+}
+
+function createCard(person, opts) {
+  const card = el('article', 'card');
+
+  const header = el('header', 'card-header');
+  if (state.logo) {
+    const chip = el('div', 'card-logo');
+    const img = el('img');
+    img.src = state.logo;
+    img.alt = '';
+    img.onerror = () => chip.remove();
+    chip.append(img);
+    header.append(chip);
+  }
+  const copy = el('div', 'card-heading');
+  if (opts.title) copy.append(el('div', 'card-title', opts.title));
+  if (opts.subtitle) copy.append(el('div', 'card-subtitle', opts.subtitle));
+  header.append(copy);
+
+  const name = el('div', 'card-name', person.name);
+
+  const code = el('div', 'card-code');
+  const { svg, modules } = Code128.toSvg(person.userId);
+  // Cap the narrowest bar at 0.5 mm so short IDs don't print comically wide.
+  svg.style.width = `min(100%, ${(modules * 0.5).toFixed(2)}mm)`;
+  code.append(svg);
+  if (opts.showIdText) code.append(el('div', 'card-id', person.userId));
+
+  card.append(header, name, code);
   return card;
 }
 
-// Main render flow:
-// 1) read inputs
-// 2) parse people
-// 3) create pages
-// 4) create cards
-// 5) update status text
-function renderCards() {
-  applyLayoutSettings();
-
-  const people = parsePeople(refs.csvInput.value);
-  refs.preview.innerHTML = '';
-
-  if (!people.length) {
-    setStatus('No valid people found. Paste a CSV or upload one first.');
-    return;
-  }
-
-  const cardsPerPage = 10;
-  const pages = chunk(people, cardsPerPage);
-
-  pages.forEach((group) => {
-    const page = document.createElement('div');
-    page.className = 'page';
-    group.forEach((person) => page.appendChild(createCard(person)));
-    refs.preview.appendChild(page);
+// Shrinks long names until they fit their box (max two lines).
+function fitNames(root) {
+  root.querySelectorAll('.card-name').forEach((node) => {
+    let size = 4.6;
+    node.style.fontSize = `${size}mm`;
+    while (size > 2.4 && (node.scrollHeight > node.clientHeight + 1 || node.scrollWidth > node.clientWidth + 1)) {
+      size -= 0.2;
+      node.style.fontSize = `${size}mm`;
+    }
   });
-
-  setStatus(`Rendered ${people.length} card${people.length === 1 ? '' : 's'} across ${pages.length} page${pages.length === 1 ? '' : 's'}.`);
 }
 
-// -----------------------------
-// Event listeners
-// -----------------------------
-// When a new logo is uploaded, convert it to a data URL so it can be displayed
-// immediately in the preview without needing a server.
-refs.logoUpload.addEventListener('change', (event) => {
-  const file = event.target.files?.[0];
-  if (!file) return;
+function renderRoster(people) {
+  const body = refs.rosterBody;
+  body.replaceChildren();
+  people.forEach((p, i) => {
+    const tr = el('tr', `level-${p.level}`);
+    tr.append(
+      el('td', 'num', String(i + 1)),
+      el('td', null, p.name || '—'),
+      el('td', 'mono', p.userId || '—'),
+      el('td', 'notes', p.notes.join(' · '))
+    );
+    body.append(tr);
+  });
+  refs.rosterCount.textContent = people.length ? `(${people.length})` : '';
+}
 
-  const reader = new FileReader();
-  reader.onload = () => {
-    state.logoDataUrl = reader.result;
-    renderCards();
+function setSummary(parts, tone) {
+  refs.summary.replaceChildren(...parts.map((p) => (typeof p === 'string' ? document.createTextNode(p) : p)));
+  refs.summary.dataset.tone = tone || '';
+}
+
+function fitPreview(pageW) {
+  const avail = refs.previewWrap.clientWidth - 32;
+  const zoom = Math.min(1, avail / (pageW * MM_TO_PX));
+  refs.preview.style.zoom = zoom > 0 ? zoom.toFixed(3) : '1';
+}
+
+function render() {
+  const s = getSettings();
+  const layout = layoutFor(s);
+  const accent = refs.accentColor.value;
+  const root = document.documentElement.style;
+
+  root.setProperty('--page-w', `${layout.pageW}mm`);
+  root.setProperty('--page-h', `${layout.pageH}mm`);
+  root.setProperty('--page-pad', `${s.margin}mm`);
+  root.setProperty('--gap', `${s.gap}mm`);
+  root.setProperty('--cols', String(Math.max(1, layout.cols)));
+  root.setProperty('--accent', accent);
+  root.setProperty('--on-accent', readableTextOn(accent));
+  refs.accentHex.textContent = accent;
+  refs.pageRule.textContent = `@page { size: ${s.paper.css} ${s.landscape ? 'landscape' : 'portrait'}; margin: 0; }`;
+  document.body.classList.toggle('no-outlines', !refs.cutMarks.checked);
+
+  state.people = buildPeople(parseInput(refs.csvInput.value), s.maxLen);
+  // Rows with errors (no name, no ID, duplicate ID) are listed but not printed.
+  const printable = state.people.filter((p) => p.level !== 'error');
+  renderRoster(state.people);
+
+  refs.preview.replaceChildren();
+  refs.exportBtn.disabled = state.people.length === 0;
+  saveSettings();
+
+  if (!layout.perPage) {
+    refs.fitInfo.textContent = 'Cards don’t fit — reduce the margin or gap.';
+    refs.fitInfo.dataset.tone = 'error';
+    setSummary(['Cards don’t fit on the page with these margins.'], 'error');
+    refs.printBtn.disabled = true;
+    return;
+  }
+  refs.fitInfo.textContent = `${layout.perPage} cards per page (${layout.cols} × ${layout.rows})`;
+  refs.fitInfo.dataset.tone = '';
+
+  const opts = {
+    title: refs.companyName.value.trim(),
+    subtitle: refs.companySubtitle.value.trim(),
+    showIdText: refs.showIdText.checked
   };
-  reader.readAsDataURL(file);
-});
 
-// Load an uploaded CSV into the textarea, then re-render.
-refs.csvFile.addEventListener('change', (event) => {
-  const file = event.target.files?.[0];
-  if (!file) return;
+  const frag = document.createDocumentFragment();
+  for (let i = 0; i < printable.length; i += layout.perPage) {
+    const page = el('div', 'page');
+    printable.slice(i, i + layout.perPage).forEach((p) => page.append(createCard(p, opts)));
+    frag.append(page);
+  }
+  refs.preview.append(frag);
+  fitPreview(layout.pageW);
+  fitNames(refs.preview);
 
+  const pages = Math.ceil(printable.length / layout.perPage);
+  const errors = state.people.filter((p) => p.level === 'error').length;
+  const warnings = state.people.filter((p) => p.level === 'warn').length;
+  refs.printBtn.disabled = printable.length === 0;
+  refs.exportBtn.disabled = state.people.length === 0;
+
+  if (!state.people.length) {
+    setSummary(['Add some names to get started.'], '');
+    return;
+  }
+  const parts = [el('strong', null, `${printable.length} card${printable.length === 1 ? '' : 's'}`),
+    ` on ${pages} page${pages === 1 ? '' : 's'}`];
+  if (errors) parts.push(el('span', 'badge error', `${errors} need${errors === 1 ? 's' : ''} fixing`));
+  if (warnings) parts.push(el('span', 'badge warn', `${warnings} note${warnings === 1 ? '' : 's'}`));
+  setSummary(parts, errors ? 'error' : '');
+}
+
+let renderTimer = 0;
+function scheduleRender() {
+  clearTimeout(renderTimer);
+  renderTimer = setTimeout(render, 150);
+}
+
+// ---------------------------------------------------------------------------
+// Files
+// ---------------------------------------------------------------------------
+function readFileAsText(file) {
   const reader = new FileReader();
   reader.onload = () => {
     refs.csvInput.value = String(reader.result || '');
-    renderCards();
+    render();
   };
   reader.readAsText(file);
+}
+
+function download(filename, text, type) {
+  const url = URL.createObjectURL(new Blob([text], { type }));
+  const a = el('a');
+  a.href = url;
+  a.download = filename;
+  document.body.append(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+function csvCell(value) {
+  let v = String(value ?? '');
+  if (/^[=+\-@\t\r]/.test(v)) v = `'${v}`; // stop spreadsheets running it as a formula
+  return /[",\r\n]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v;
+}
+
+// ---------------------------------------------------------------------------
+// Events
+// ---------------------------------------------------------------------------
+SETTING_IDS.forEach((id) => {
+  refs[id].addEventListener(refs[id].type === 'checkbox' || refs[id].tagName === 'SELECT' ? 'change' : 'input', scheduleRender);
 });
 
-refs.renderBtn.addEventListener('click', renderCards);
-refs.printBtn.addEventListener('click', () => window.print());
-
-// Generates a tiny starter CSV so the user can see the expected format.
-refs.downloadCsvBtn.addEventListener('click', () => {
-  const csv = [
-    'full_name,user_id',
-    'Anne Jotheeswaran,AJOTHEESWARA',
-    'Humza Kayani,HKAYANI',
-    'Rajpreet Kaur,RKAUR19'
-  ].join('\n');
-
-  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement('a');
-  link.href = url;
-  link.download = 'employee-cards-sample.csv';
-  document.body.appendChild(link);
-  link.click();
-  link.remove();
-  URL.revokeObjectURL(url);
+refs.csvFile.addEventListener('change', () => {
+  const file = refs.csvFile.files?.[0];
+  if (file) readFileAsText(file);
+  refs.csvFile.value = ''; // allow re-selecting the same file after editing it
 });
 
-// Any change to these inputs should immediately refresh the preview.
-[
-  refs.companyName,
-  refs.companySubtitle,
-  refs.pageSize,
-  refs.pagePadding,
-  refs.gridGap,
-  refs.accentColor
-].forEach((element) => {
-  element.addEventListener('input', renderCards);
+// Drag and drop onto the drop zone. Also stop the browser from navigating
+// away (and losing the user's work) when a file is dropped anywhere else.
+['dragover', 'drop'].forEach((type) => window.addEventListener(type, (e) => e.preventDefault()));
+refs.dropzone.addEventListener('dragenter', () => refs.dropzone.classList.add('over'));
+refs.dropzone.addEventListener('dragleave', () => refs.dropzone.classList.remove('over'));
+refs.dropzone.addEventListener('drop', (e) => {
+  refs.dropzone.classList.remove('over');
+  const file = e.dataTransfer?.files?.[0];
+  if (file) readFileAsText(file);
 });
 
-// Initial render on page load so the sample data is visible immediately.
-renderCards();
+refs.logoUpload.addEventListener('change', () => {
+  const file = refs.logoUpload.files?.[0];
+  refs.logoUpload.value = '';
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = () => { state.logo = reader.result; render(); };
+  reader.readAsDataURL(file);
+});
+
+refs.logoClear.addEventListener('click', () => { state.logo = null; render(); });
+
+refs.formatsBtn.addEventListener('click', () => {
+  const show = refs.formats.hidden;
+  refs.formats.hidden = !show;
+  refs.formatsBtn.textContent = show ? 'Hide formats' : 'Show formats';
+  refs.formatsBtn.setAttribute('aria-expanded', String(show));
+});
+
+refs.printBtn.addEventListener('click', () => {
+  clearTimeout(renderTimer);
+  render();
+  window.print();
+});
+
+refs.exportBtn.addEventListener('click', () => {
+  const lines = ['full_name,user_id', ...state.people
+    .filter((p) => p.name && p.userId)
+    .map((p) => `${csvCell(p.name)},${csvCell(p.userId)}`)];
+  download('id-cards.csv', `${lines.join('\r\n')}\r\n`, 'text/csv;charset=utf-8');
+});
+
+refs.sampleBtn.addEventListener('click', () => {
+  download('id-cards-sample.csv', 'full_name,user_id\r\nJordan Lee,JLEE\r\nPriya Patel,\r\nMarcus Chen,MCHEN07\r\n', 'text/csv;charset=utf-8');
+});
+
+refs.resetBtn.addEventListener('click', () => {
+  if (!window.confirm('Reset all settings and replace the name list with sample data?')) return;
+  try { localStorage.removeItem(STORAGE_KEY); } catch { /* ignore */ }
+  window.location.reload();
+});
+
+window.addEventListener('resize', () => fitPreview(layoutFor(getSettings()).pageW));
+window.addEventListener('beforeprint', () => { refs.preview.style.zoom = '1'; });
+window.addEventListener('afterprint', () => fitPreview(layoutFor(getSettings()).pageW));
+
+// ---------------------------------------------------------------------------
+// Start
+// ---------------------------------------------------------------------------
+loadSettings();
+render();
