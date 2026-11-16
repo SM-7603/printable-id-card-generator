@@ -3,134 +3,154 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Printable Employee ID Cards</title>
-  <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.6/dist/JsBarcode.all.min.js"></script>
+  <title>Printable ID Cards</title>
   <link rel="stylesheet" href="styles.css" />
+  <style id="pageRule">@page { size: letter portrait; margin: 0; }</style>
 </head>
 <body>
-  <div class="app-shell">
-    <aside class="panel controls-panel">
-      <div class="panel-header">
-        <h1>Printable ID Cards</h1>
-        <p class="subtle">
-          Browser-only card generator for fixed-size printable IDs. Upload a CSV or paste names,
-          generate user IDs as <strong>first initial + last name</strong>, then print and cut.
-        </p>
-      </div>
+  <div class="app">
+    <aside class="sidebar" aria-label="Card settings">
+      <header class="brand">
+        <h1>ID Card Studio</h1>
+        <p>Paste names, check the list, print. Everything stays in your browser.</p>
+      </header>
 
-      <section class="controls-section">
-        <h2>Branding</h2>
+      <!-- Step 1: people -->
+      <section class="step" aria-labelledby="step1">
+        <h2 id="step1"><span class="step-num">1</span> People</h2>
+
+        <label class="dropzone" id="dropzone" for="csvFile">
+          <input id="csvFile" type="file" accept=".csv,.txt,text/csv,text/plain" hidden />
+          <strong>Drop a CSV here</strong> or <span class="link">browse</span>
+        </label>
+
         <div class="field">
-          <label for="companyName">Company / Header</label>
+          <label for="csvInput">…or paste names / CSV</label>
+          <textarea id="csvInput" spellcheck="false" rows="9"></textarea>
+          <p class="hint">
+            One name per line works. Columns are matched by header
+            (<code>name</code>, <code>first_name</code>, <code>last_name</code>, <code>user_id</code>…).
+            <button type="button" class="text-btn" id="formatsBtn" aria-expanded="false" aria-controls="formats">Show formats</button>
+          </p>
+          <pre class="formats" id="formats" hidden>full_name
+Ada Lovelace
+
+first_name,last_name
+Ada,Lovelace
+
+full_name,user_id        user_id,full_name
+Ada Lovelace,ALOVELACE   ALOVELACE,Ada Lovelace</pre>
+        </div>
+
+        <div class="row">
+          <div class="field">
+            <label for="idMaxLen">Max ID length</label>
+            <input id="idMaxLen" type="number" min="4" max="24" step="1" value="12" />
+          </div>
+          <div class="field">
+            <label>Generated ID</label>
+            <div class="readonly">First initial + last name</div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Step 2: card design -->
+      <section class="step" aria-labelledby="step2">
+        <h2 id="step2"><span class="step-num">2</span> Card design</h2>
+        <div class="field">
+          <label for="companyName">Header</label>
           <input id="companyName" type="text" value="GEODIS | Shift 2" />
         </div>
         <div class="field">
           <label for="companySubtitle">Subtitle</label>
           <input id="companySubtitle" type="text" value="Oshawa 6011 · Employee Access ID" />
         </div>
-        <div class="field">
-          <label for="logoUpload">Logo</label>
-          <input id="logoUpload" type="file" accept="image/*" />
+        <div class="row">
+          <div class="field">
+            <label for="accentColor">Accent colour</label>
+            <div class="color-field">
+              <input id="accentColor" type="color" value="#1d3fbb" />
+              <span id="accentHex">#1d3fbb</span>
+            </div>
+          </div>
+          <div class="field">
+            <label>Logo</label>
+            <div class="logo-field">
+              <label class="btn small secondary" for="logoUpload">Change</label>
+              <input id="logoUpload" type="file" accept="image/*" hidden />
+              <button type="button" class="btn small ghost" id="logoClear">Remove</button>
+            </div>
+          </div>
         </div>
+        <label class="check"><input id="showIdText" type="checkbox" checked /> Print ID under barcode</label>
       </section>
 
-      <section class="controls-section">
-        <h2>Layout</h2>
-        <div class="row two-col">
+      <!-- Step 3: page -->
+      <section class="step" aria-labelledby="step3">
+        <h2 id="step3"><span class="step-num">3</span> Page &amp; print</h2>
+        <div class="row">
           <div class="field">
-            <label for="pageSize">Page Size</label>
+            <label for="pageSize">Paper</label>
             <select id="pageSize">
-              <option value="letter" selected>Letter</option>
+              <option value="letter">Letter</option>
               <option value="a4">A4</option>
             </select>
           </div>
           <div class="field">
-            <label for="pagePadding">Page Padding (mm)</label>
-            <input id="pagePadding" type="number" min="4" max="20" step="0.5" value="10" />
+            <label for="orientation">Orientation</label>
+            <select id="orientation">
+              <option value="portrait">Portrait</option>
+              <option value="landscape">Landscape</option>
+            </select>
           </div>
         </div>
-        <div class="row two-col">
+        <div class="row">
           <div class="field">
-            <label for="gridGap">Gap Between Cards (mm)</label>
-            <input id="gridGap" type="number" min="0" max="10" step="0.5" value="4" />
+            <label for="pagePadding">Margin (mm)</label>
+            <input id="pagePadding" type="number" min="0" max="30" step="0.5" value="8" />
           </div>
           <div class="field">
-            <label for="accentColor">Accent</label>
-            <input id="accentColor" type="text" value="#2d11ea" />
+            <label for="gridGap">Gap (mm)</label>
+            <input id="gridGap" type="number" min="0" max="15" step="0.5" value="4" />
           </div>
         </div>
+        <label class="check"><input id="cutMarks" type="checkbox" checked /> Card outlines (cut guides)</label>
+        <p class="fit" id="fitInfo"></p>
       </section>
 
-      <section class="controls-section">
-        <h2>People Data</h2>
-        <div class="field">
-          <label for="csvFile">Upload CSV</label>
-          <input id="csvFile" type="file" accept=".csv,text/csv" />
-        </div>
-        <div class="field">
-          <label for="csvInput">Or paste CSV / names</label>
-          <textarea id="csvInput">full_name
-Anne Jotheeswaran
-Cabeeshankaran Prabakaran
-Evelyn Bukosela
-Humza Kayani
-Jebin Bosco
-Jigeshkumar Barot
-Priyanshu Bhatt
-Rajbir Singh
-Rupam Sharma
-Shorya Singh</textarea>
-        </div>
-
-        <div class="sample-block">
-          <div class="sample-title">Accepted formats</div>
-          <pre class="sample">1) full_name
-Anne Jotheeswaran
-Humza Kayani
-
-2) first_name,last_name
-Anne,Jotheeswaran
-Humza,Kayani
-
-3) full_name,user_id
-Anne Jotheeswaran,AJOTHEESWARA
-Humza Kayani,HKAYANI
-
-4) user_id,full_name
-AJOTHEESWARA,Anne Jotheeswaran
-HKAYANI,Humza Kayani</pre>
-        </div>
-
-        <div class="btn-row">
-          <button id="renderBtn" type="button">Render cards</button>
-          <button id="printBtn" type="button">Print</button>
-          <button id="downloadCsvBtn" type="button" class="secondary">Sample CSV</button>
-        </div>
-
-        <div id="status" class="status">Ready.</div>
-
-        <div class="pill-row">
-          <span class="pill">Fixed 85.6 * 54 mm</span>
-          <span class="pill">CSV-driven</span>
-          <span class="pill">Browser-only</span>
-        </div>
-      </section>
+      <footer class="sidebar-foot">
+        <button type="button" class="text-btn" id="sampleBtn">Download sample CSV</button>
+        <button type="button" class="text-btn" id="resetBtn">Reset everything</button>
+      </footer>
     </aside>
 
-    <main class="panel preview-panel">
-      <div class="preview-toolbar">
-        <div>
-          <h2>Preview</h2>
-          <p class="subtle">Print at 100% scale. Disable browser headers and footers.</p>
+    <main class="workspace">
+      <div class="toolbar">
+        <div class="summary" id="summary" role="status" aria-live="polite"></div>
+        <div class="toolbar-actions">
+          <button type="button" class="btn secondary" id="exportBtn">Export ID list</button>
+          <button type="button" class="btn primary" id="printBtn">Print cards</button>
         </div>
       </div>
-      <div class="preview-shell">
+
+      <details class="roster" id="rosterBox" open>
+        <summary>People &amp; IDs <span id="rosterCount"></span></summary>
+        <div class="roster-scroll">
+          <table>
+            <thead><tr><th>#</th><th>Name</th><th>User ID</th><th>Notes</th></tr></thead>
+            <tbody id="rosterBody"></tbody>
+          </table>
+        </div>
+      </details>
+
+      <div class="preview-wrap" id="previewWrap">
         <div id="preview"></div>
       </div>
-      <footer class="app-footer">Built by Shubham Mohanty · Internal tool</footer>
+      <p class="print-tip">Print at <strong>100% / Actual size</strong>, margins <strong>None</strong>, headers &amp; footers <strong>off</strong>, background graphics <strong>on</strong>.</p>
     </main>
   </div>
 
+  <script src="barcode.js"></script>
   <script src="app.js"></script>
 </body>
 </html>
