@@ -116,6 +116,19 @@ textarea {
 input:focus-visible, select:focus-visible, textarea:focus-visible { outline-offset: 0; border-color: var(--brand); }
 
 .hint { margin: 2px 0 0; font-size: 12px; color: var(--muted); }
+.hint-tight { margin: -4px 0 12px; }
+.muted { color: var(--muted); }
+.color-header .card-subtitle { color: inherit; opacity: 0.85; }
+
+.callout {
+  margin: 0;
+  padding: 9px 11px;
+  border-radius: 8px;
+  background: var(--warn-bg);
+  color: #5c3a00;
+  font-size: 12.5px;
+  line-height: 1.45;
+}
 
 .formats {
   margin: 4px 0 0;
@@ -224,6 +237,7 @@ input:focus-visible, select:focus-visible, textarea:focus-visible { outline-offs
 .badge { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 12px; font-weight: 600; }
 .badge.error { background: var(--error-bg); color: var(--error); }
 .badge.warn { background: var(--warn-bg); color: var(--warn); }
+.badge.ok { background: #e3f5ea; color: #136c3a; }
 
 .roster {
   margin-bottom: 18px;
@@ -241,10 +255,44 @@ th { position: sticky; top: 0; background: #fafbfc; font-size: 11.5px; font-weig
 tr:last-child td { border-bottom: 0; }
 td.num { color: var(--muted); width: 1%; }
 td.mono { font-family: var(--mono); white-space: nowrap; }
-td.notes { color: var(--muted); font-size: 12px; }
-tr.level-warn td.notes { color: var(--warn); }
-tr.level-error { background: var(--error-bg); }
-tr.level-error td.notes { color: var(--error); font-weight: 600; }
+.th-hint { font-weight: 400; text-transform: none; letter-spacing: 0; color: #8a91a0; }
+td { vertical-align: middle; }
+tr.row-error { background: var(--error-bg); }
+tr.row-guess { background: #fffaf0; }
+
+.id-input {
+  width: 100%;
+  min-width: 120px;
+  max-width: 200px;
+  padding: 4px 8px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  font: 600 13px var(--mono);
+  text-transform: uppercase;
+}
+.id-input:hover { border-color: #cfd4dc; background: #fff; }
+.id-input:focus { border-color: var(--brand); background: #fff; outline: none; }
+tr.row-guess .id-input { border: 1px dashed #d9a441; background: #fff; }
+tr.row-error .id-input { border: 1px solid #e8a39d; background: #fff; }
+
+.status-cell { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.tag { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 12px; font-weight: 600; }
+.tag-list { background: #e3f5ea; color: #136c3a; }
+.tag-guess { background: var(--warn-bg); color: var(--warn); }
+.tag-error { background: #fff; color: var(--error); }
+
+.roster-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 14px;
+  border-top: 1px solid var(--line);
+  background: var(--warn-bg);
+  color: #5c3a00;
+  font-size: 13px;
+}
 
 .preview-wrap { overflow-x: auto; padding: 4px 16px 8px; }
 
@@ -291,23 +339,40 @@ tr.level-error td.notes { color: var(--error); font-weight: 600; }
   display: flex;
   align-items: center;
   gap: 2.4mm;
-  padding: 0 3.4mm;
-  background: var(--accent);
-  color: var(--on-accent);
+  padding: 0 3.2mm;
+  border-bottom: 0.5mm solid var(--accent);
 }
+/* Optional filled header (uses more ink). */
+.color-header .card-header { background: var(--accent); color: var(--on-accent); border-bottom: 0; }
 
 .card-logo {
   flex: 0 0 auto;
   display: flex;
   align-items: center;
   height: 9.4mm;
-  padding: 0.7mm 1mm;
   background: #fff;
   border-radius: 1.6mm;
 }
+.color-header .card-logo { padding: 0.7mm 1mm; }
 .card-logo img { display: block; height: 8mm; width: auto; max-width: 22mm; object-fit: contain; }
 
-.card-heading { min-width: 0; }
+.card-heading { min-width: 0; flex: 1; }
+
+.card-shift {
+  flex: 0 0 auto;
+  display: grid;
+  justify-items: center;
+  min-width: 10mm;
+  padding: 0.5mm 1.6mm 0.7mm;
+  border: 0.4mm solid var(--accent);
+  border-radius: 1.6mm;
+  background: #fff;
+  color: #111827;
+  line-height: 1;
+}
+.card-shift-label { font-size: 1.6mm; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: #5f6777; }
+.card-shift-value { margin-top: 0.4mm; font-size: 4.2mm; font-weight: 800; letter-spacing: 0.02em; white-space: nowrap; }
+.color-header .card-shift { border-color: #fff; }
 
 .card-title {
   font-size: 3.1mm;
@@ -324,7 +389,7 @@ tr.level-error td.notes { color: var(--error); font-weight: 600; }
   margin-top: 0.4mm;
   font-size: 2.2mm;
   line-height: 1.2;
-  opacity: 0.85;
+  color: #5f6777;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -376,3 +441,5 @@ tr.level-error td.notes { color: var(--error); font-weight: 600; }
   .page { margin: 0; box-shadow: none; break-after: page; }
   .page:last-child { break-after: auto; }
 }
+
+.roster-bar[hidden] { display: none; }

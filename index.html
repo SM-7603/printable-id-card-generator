@@ -38,33 +38,64 @@ Ada Lovelace
 first_name,last_name
 Ada,Lovelace
 
-full_name,user_id        user_id,full_name
-Ada Lovelace,ALOVELACE   ALOVELACE,Ada Lovelace</pre>
+full_name,user_id,shift
+Ada Lovelace,ALOVELACE,2A
+
+user_id,full_name
+ALOVELACE,Ada Lovelace</pre>
         </div>
 
         <div class="row">
           <div class="field">
+            <label for="idRule">When there's no ID, guess</label>
+            <select id="idRule">
+              <option value="initialLast">Initial + last (JLEE)</option>
+              <option value="first">First name (JORDAN)</option>
+              <option value="firstInitial">First + initial (JORDANL)</option>
+              <option value="firstLast">First + last (JORDANLEE)</option>
+            </select>
+          </div>
+          <div class="field">
             <label for="idMaxLen">Max ID length</label>
             <input id="idMaxLen" type="number" min="4" max="24" step="1" value="12" />
           </div>
-          <div class="field">
-            <label>Generated ID</label>
-            <div class="readonly">First initial + last name</div>
-          </div>
         </div>
+        <p class="callout">
+          Guessed IDs are only a starting point. <strong>Check each one against the person's real
+          login</strong> in the list on the right, then type the right one in or mark it checked.
+        </p>
       </section>
 
       <!-- Step 2: card design -->
       <section class="step" aria-labelledby="step2">
         <h2 id="step2"><span class="step-num">2</span> Card design</h2>
-        <div class="field">
-          <label for="companyName">Header</label>
-          <input id="companyName" type="text" value="GEODIS | Shift 2" />
+        <div class="row">
+          <div class="field">
+            <label for="companyName">Company</label>
+            <input id="companyName" type="text" value="GEODIS" />
+          </div>
+          <div class="field">
+            <label for="shift">Shift</label>
+            <input id="shift" type="text" list="shiftOptions" value="2A" placeholder="e.g. 2A" autocomplete="off" />
+            <datalist id="shiftOptions">
+              <option value="1A"></option><option value="1B"></option>
+              <option value="2A"></option><option value="2B"></option>
+              <option value="3A"></option><option value="3B"></option>
+              <option value="Days"></option><option value="Nights"></option><option value="Weekend"></option>
+            </datalist>
+          </div>
         </div>
-        <div class="field">
-          <label for="companySubtitle">Subtitle</label>
-          <input id="companySubtitle" type="text" value="Oshawa 6011 · Employee Access ID" />
+        <div class="row">
+          <div class="field">
+            <label for="site">Site</label>
+            <input id="site" type="text" value="Oshawa 6011" />
+          </div>
+          <div class="field">
+            <label for="cardLabel">Card label</label>
+            <input id="cardLabel" type="text" value="Employee Access ID" />
+          </div>
         </div>
+        <p class="hint hint-tight">Leave Shift empty to hide it. A <code>shift</code> column in your list overrides it per person.</p>
         <div class="row">
           <div class="field">
             <label for="accentColor">Accent colour</label>
@@ -83,6 +114,7 @@ Ada Lovelace,ALOVELACE   ALOVELACE,Ada Lovelace</pre>
           </div>
         </div>
         <label class="check"><input id="showIdText" type="checkbox" checked /> Print ID under barcode</label>
+        <label class="check"><input id="colorHeader" type="checkbox" /> Coloured header <span class="muted">(uses more ink)</span></label>
       </section>
 
       <!-- Step 3: page -->
@@ -119,7 +151,7 @@ Ada Lovelace,ALOVELACE   ALOVELACE,Ada Lovelace</pre>
       </section>
 
       <footer class="sidebar-foot">
-        <button type="button" class="text-btn" id="sampleBtn">Download sample CSV</button>
+        <button type="button" class="text-btn" id="sampleBtn">Download template CSV</button>
         <button type="button" class="text-btn" id="resetBtn">Reset everything</button>
       </footer>
     </aside>
@@ -135,9 +167,13 @@ Ada Lovelace,ALOVELACE   ALOVELACE,Ada Lovelace</pre>
 
       <details class="roster" id="rosterBox" open>
         <summary>People &amp; IDs <span id="rosterCount"></span></summary>
+        <div class="roster-bar" id="rosterBar" hidden>
+          <span id="rosterBarText"></span>
+          <button type="button" class="btn small secondary" id="checkAllBtn">Mark all as checked</button>
+        </div>
         <div class="roster-scroll">
           <table>
-            <thead><tr><th>#</th><th>Name</th><th>User ID</th><th>Notes</th></tr></thead>
+            <thead><tr><th>#</th><th>Name</th><th>Shift</th><th>User ID <span class="th-hint">click to edit</span></th><th>Status</th></tr></thead>
             <tbody id="rosterBody"></tbody>
           </table>
         </div>
