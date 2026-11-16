@@ -66,6 +66,15 @@ code { font-family: var(--mono); font-size: 0.92em; }
 /* ---------------------------------------------------------------- sidebar */
 .brand h1 { margin: 0; font-size: 19px; letter-spacing: -0.01em; }
 .brand p { margin: 4px 0 0; color: var(--muted); font-size: 13px; }
+.brand .contact {
+  margin-top: 12px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: #eef2ff;
+  color: #27346b;
+  font-size: 12.5px;
+  line-height: 1.45;
+}
 
 .step { margin-top: 22px; padding-top: 18px; border-top: 1px solid var(--line); }
 
