@@ -22,6 +22,8 @@ No server, no install, no internet needed — open `index.html` and go.
 *Export ID list* downloads `full_name,user_id,shift,id_source` for everyone, so you have a record of what was printed.
 Settings and the name list are saved in your browser between visits; *Reset everything* clears them.
 
+**Theme:** Light, Dark or System (follows your computer) at the bottom of the sidebar. Only the app changes; the card preview stays white because that's what prints.
+
 ## Getting the right IDs
 
 Guessing from names is the weak spot: logins often don't follow the pattern (duplicates, nicknames, old accounts).

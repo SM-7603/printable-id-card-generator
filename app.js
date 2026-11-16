@@ -637,13 +637,37 @@ refs.sampleBtn.addEventListener('click', () => {
 
 refs.resetBtn.addEventListener('click', () => {
   if (!window.confirm('Reset all settings and replace the name list with sample data?')) return;
-  try { localStorage.removeItem(STORAGE_KEY); } catch { /* ignore */ }
+  try { localStorage.removeItem(STORAGE_KEY); localStorage.removeItem(THEME_KEY); } catch { /* ignore */ }
   window.location.reload();
 });
 
 window.addEventListener('resize', () => fitPreview(layoutFor(getSettings()).pageW));
 window.addEventListener('beforeprint', () => { refs.preview.style.zoom = '1'; });
 window.addEventListener('afterprint', () => fitPreview(layoutFor(getSettings()).pageW));
+
+// ---------------------------------------------------------------------------
+// Theme (app only; cards always preview and print on white)
+// ---------------------------------------------------------------------------
+const THEME_KEY = 'idcard-studio:theme';
+const darkQuery = window.matchMedia('(prefers-color-scheme: dark)');
+const themeInputs = [...document.querySelectorAll('input[name="theme"]')];
+
+function themePref() {
+  try { return localStorage.getItem(THEME_KEY) || 'system'; } catch { return 'system'; }
+}
+
+function applyTheme(pref) {
+  const dark = pref === 'dark' || (pref === 'system' && darkQuery.matches);
+  document.documentElement.dataset.theme = dark ? 'dark' : 'light';
+  themeInputs.forEach((input) => { input.checked = input.value === pref; });
+}
+
+themeInputs.forEach((input) => input.addEventListener('change', () => {
+  try { localStorage.setItem(THEME_KEY, input.value); } catch { /* ignore */ }
+  applyTheme(input.value);
+}));
+darkQuery.addEventListener('change', () => applyTheme(themePref()));
+applyTheme(themePref());
 
 // ---------------------------------------------------------------------------
 // Start
